@@ -3,14 +3,9 @@ server:
 spring:
   application:
     name: payment-service
-  datasource:
-    url: jdbc:h2:mem:paymentdb
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: password
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/ecommerce?retryWrites=false
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     producer:
