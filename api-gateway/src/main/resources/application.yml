@@ -1,0 +1,173 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  cloud:
+    gateway:
+      #  Global CORS 
+      globalcors:
+        corsConfigurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
+            allowedHeaders: "*"
+            exposedHeaders: [X-Correlation-Id, X-RateLimit-Remaining]
+
+      #  Global default filters applied to EVERY route 
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 100        # tokens added/sec
+            redis-rate-limiter.burstCapacity: 200        # max burst
+            redis-rate-limiter.requestedTokens: 1
+            key-resolver: "#{@ipKeyResolver}"
+
+      #  Routes 
+      routes:
+        # ORDER SERVICE
+        - id: order-service
+          uri: ${ORDER_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/orders/**
+          filters:
+            - AddRequestHeader=X-Gateway-Source, ecom-gateway
+            - name: CircuitBreaker
+              args:
+                name: orderServiceCB
+                fallbackUri: forward:/fallback/order
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
+                methods: GET
+                backoff:
+                  firstBackoff: 500ms
+                  maxBackoff: 5s
+                  factor: 2
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+
+        # PRODUCT SERVICE
+        - id: product-service
+          uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/products/**
+          filters:
+            - AddRequestHeader=X-Gateway-Source, ecom-gateway
+            - name: CircuitBreaker
+              args:
+                name: productServiceCB
+                fallbackUri: forward:/fallback/product
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY, SERVICE_UNAVAILABLE
+                methods: GET
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 200
+                redis-rate-limiter.burstCapacity: 400
+
+        # INVENTORY SERVICE
+        - id: inventory-service
+          uri: ${INVENTORY_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/inventory/**
+          filters:
+            - AddRequestHeader=X-Gateway-Source, ecom-gateway
+            - name: CircuitBreaker
+              args:
+                name: inventoryServiceCB
+                fallbackUri: forward:/fallback/inventory
+
+        # PAYMENT SERVICE
+        - id: payment-service
+          uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/v1/payments/**
+          filters:
+            - AddRequestHeader=X-Gateway-Source, ecom-gateway
+            - name: CircuitBreaker
+              args:
+                name: paymentServiceCB
+                fallbackUri: forward:/fallback/payment
+
+        # USER SERVICE
+        - id: user-service
+          uri: ${USER_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/v1/users/**
+          filters:
+            - AddRequestHeader=X-Gateway-Source, ecom-gateway
+            - name: CircuitBreaker
+              args:
+                name: userServiceCB
+                fallbackUri: forward:/fallback/user
+
+#  Resilience4j circuit breakers used by gateway routes 
+resilience4j:
+  circuitbreaker:
+    instances:
+      orderServiceCB:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        slowCallRateThreshold: 80
+        slowCallDurationThreshold: 3s
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 5
+        minimumNumberOfCalls: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+      productServiceCB:
+        slidingWindowSize: 20
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        minimumNumberOfCalls: 5
+      inventoryServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 60
+        waitDurationInOpenState: 30s
+        minimumNumberOfCalls: 5
+      paymentServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 40      # stricter – payment is critical
+        waitDurationInOpenState: 60s
+        minimumNumberOfCalls: 5
+      userServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+
+#  Actuator 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,gateway,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{correlationId}] %-5level %logger{36} - %msg%n"
+  level:
+    com.ecommerce: DEBUG
+    org.springframework.cloud.gateway: INFO

@@ -1,0 +1,42 @@
+server:
+  port: 8082
+spring:
+  application:
+    name: product-service
+  datasource:
+    url: jdbc:h2:mem:productdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+resilience4j:
+  ratelimiter:
+    instances:
+      productReadLimiter:
+        limitForPeriod: 500
+        limitRefreshPeriod: 1s
+        timeoutDuration: 100ms
+  circuitbreaker:
+    instances:
+      externalPricingCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        minimumNumberOfCalls: 5
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always

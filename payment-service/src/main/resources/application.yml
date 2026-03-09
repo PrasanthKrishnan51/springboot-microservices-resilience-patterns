@@ -1,0 +1,75 @@
+server:
+  port: 8084
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: jdbc:h2:mem:paymentdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+    consumer:
+      group-id: payment-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ecommerce.*"
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      paymentGatewayCB:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        failureRateThreshold: 30        # Strict – payment failures are costly
+        waitDurationInOpenState: 60s
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  retry:
+    instances:
+      paymentGatewayRetry:
+        maxAttempts: 2                  # Only 1 extra retry – avoid double-charge risk
+        waitDuration: 2s
+        enableExponentialBackoff: false
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+  bulkhead:
+    instances:
+      paymentGatewayBulkhead:
+        maxConcurrentCalls: 10          # Payment gateway has strict concurrency limits
+        maxWaitDuration: 2s
+  ratelimiter:
+    instances:
+      paymentGatewayLimiter:
+        limitForPeriod: 20             # Gateway allows max 20 TPS
+        limitRefreshPeriod: 1s
+        timeoutDuration: 1s
+  timelimiter:
+    instances:
+      paymentGatewayTimeout:
+        timeoutDuration: 15s           # Gateway SLA is 10s; give 15s buffer
+        cancelRunningFuture: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true

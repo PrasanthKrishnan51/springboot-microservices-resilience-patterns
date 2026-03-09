@@ -1,0 +1,215 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: order-service
+
+  datasource:
+    url: jdbc:h2:mem:orderdb;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 1
+        delivery.timeout.ms: 30000
+    consumer:
+      group-id: order-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.ecommerce.*"
+        isolation.level: read_committed
+
+# ════════════════════════════════════════════════════════════════════
+#   RESILIENCE4J – Every Pattern with Detailed Comments
+# ════════════════════════════════════════════════════════════════════
+resilience4j:
+
+  # ── CIRCUIT BREAKER ─────────────────────────────────────────────
+  #   Wraps calls to external services.
+  #   States: CLOSED → OPEN (after threshold) → HALF_OPEN → CLOSED
+  circuitbreaker:
+    instances:
+      # Used when calling Inventory Service
+      inventoryServiceCB:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED          # COUNT_BASED or TIME_BASED
+        slidingWindowSize: 10                   # last 10 calls evaluated
+        minimumNumberOfCalls: 5                 # need at least 5 before trip
+        failureRateThreshold: 50                # trip when 50% of calls fail
+        slowCallRateThreshold: 80               # also trip if 80% of calls are slow
+        slowCallDurationThreshold: 3s           # "slow" = > 3 seconds
+        waitDurationInOpenState: 30s            # stay OPEN 30s before trying HALF_OPEN
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.reactive.function.client.WebClientResponseException$ServiceUnavailable
+        ignoreExceptions:
+          - com.ecommerce.common.exception.EcommerceException   # business errors don't trip CB
+
+      # Used when calling Payment Service (stricter – money is involved)
+      paymentServiceCB:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 30                # stricter – 30% failure trips it
+        waitDurationInOpenState: 60s            # longer cool-down for payments
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+
+      # Used when calling Product Service
+      productServiceCB:
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 5
+
+  # ── RETRY ───────────────────────────────────────────────────────
+  #   Retries failed calls with configurable backoff.
+  #   Applied BEFORE circuit breaker in the decoration chain.
+  retry:
+    instances:
+      inventoryServiceRetry:
+        maxAttempts: 3                          # total attempts including first
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2         # 500ms → 1s → 2s
+        exponentialMaxWaitDuration: 5s
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - com.ecommerce.common.exception.EcommerceException
+
+      paymentServiceRetry:
+        maxAttempts: 2                          # payment: retry only once extra
+        waitDuration: 1s
+        enableExponentialBackoff: false
+
+      productServiceRetry:
+        maxAttempts: 3
+        waitDuration: 300ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+
+  # ── BULKHEAD (Semaphore) ────────────────────────────────────────
+  #   Limits the number of concurrent calls to a dependency.
+  #   Prevents one slow service from exhausting all threads.
+  bulkhead:
+    instances:
+      inventoryServiceBulkhead:
+        maxConcurrentCalls: 20                  # max 20 simultaneous calls
+        maxWaitDuration: 500ms                  # wait 500ms for a permit; then fail-fast
+      paymentServiceBulkhead:
+        maxConcurrentCalls: 10                  # payment is heavier; cap lower
+        maxWaitDuration: 1s
+      productServiceBulkhead:
+        maxConcurrentCalls: 30
+        maxWaitDuration: 200ms
+
+  # ── THREAD-POOL BULKHEAD ────────────────────────────────────────
+  #   Isolates calls in separate thread pools (vs semaphore above).
+  #   Use for blocking I/O; semaphore for reactive/non-blocking.
+  thread-pool-bulkhead:
+    instances:
+      orderProcessingPool:
+        maxThreadPoolSize: 20
+        coreThreadPoolSize: 10
+        queueCapacity: 50
+        keepAliveDuration: 20ms
+
+  # ── RATE LIMITER ────────────────────────────────────────────────
+  #   Caps HOW MANY calls this service makes to a dependency per period.
+  #   Different from Gateway rate-limiter (that caps inbound requests).
+  ratelimiter:
+    instances:
+      paymentGatewayLimiter:
+        limitForPeriod: 20                      # max 20 calls per refresh period
+        limitRefreshPeriod: 1s                  # refresh every second
+        timeoutDuration: 500ms                  # wait up to 500ms for a permit
+        registerHealthIndicator: true
+      inventoryLimiter:
+        limitForPeriod: 50
+        limitRefreshPeriod: 1s
+        timeoutDuration: 200ms
+      orderCreationLimiter:
+        limitForPeriod: 100                     # max 100 orders/sec this instance
+        limitRefreshPeriod: 1s
+        timeoutDuration: 0ms                    # fail immediately if over limit
+
+  # ── TIME LIMITER ────────────────────────────────────────────────
+  #   Cancels async calls that take too long (works with CompletableFuture).
+  timelimiter:
+    instances:
+      inventoryTimeout:
+        timeoutDuration: 5s
+        cancelRunningFuture: true
+      paymentTimeout:
+        timeoutDuration: 10s                    # payments can take longer
+        cancelRunningFuture: true
+      productTimeout:
+        timeoutDuration: 3s
+        cancelRunningFuture: true
+
+# ── Service URLs ─────────────────────────────────────────────────
+services:
+  inventory-service:
+    url: ${INVENTORY_SERVICE_URL:http://localhost:8083}
+  payment-service:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+  product-service:
+    url: ${PRODUCT_SERVICE_URL:http://localhost:8082}
+
+# ── Actuator ─────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: >
+          health, info, metrics, prometheus,
+          circuitbreakers, circuitbreakerevents,
+          retries, retryevents,
+          bulkheads,
+          ratelimiters,
+          logfile
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+    ratelimiters:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%X{correlationId}] %highlight(%-5level) %cyan(%logger{30}) - %msg%n"
+  level:
+    com.ecommerce: DEBUG
+    io.github.resilience4j: DEBUG
+    org.springframework.kafka: INFO
