@@ -103,18 +103,6 @@ spring:
                 name: paymentServiceCB
                 fallbackUri: forward:/fallback/payment
 
-        # USER SERVICE
-        - id: user-service
-          uri: ${USER_SERVICE_URL:http://localhost:8085}
-          predicates:
-            - Path=/api/v1/users/**
-          filters:
-            - AddRequestHeader=X-Gateway-Source, ecom-gateway
-            - name: CircuitBreaker
-              args:
-                name: userServiceCB
-                fallbackUri: forward:/fallback/user
-
 #  Resilience4j circuit breakers used by gateway routes 
 resilience4j:
   circuitbreaker:
