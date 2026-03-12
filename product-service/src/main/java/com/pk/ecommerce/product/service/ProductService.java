@@ -7,6 +7,7 @@ import com.pk.ecommerce.product.model.Product;
 import com.pk.ecommerce.product.repository.ProductRepository;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import io.github.resilience4j.retry.annotation.Retry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -31,11 +32,12 @@ public class ProductService {
 
     //@RateLimiter(name = "productReadLimiter", fallbackMethod = "productRateLimitFallback")
     @CircuitBreaker(name = "externalPricingCB", fallbackMethod = "pricingFallback")
+    @Retry(name = "pricingRetry", fallbackMethod = "retryFallback")
     public ApiResponse<Product> getProduct(String id) {
 
-        /*if(true){
+        if(true){
             throw new RuntimeException("Service Unavailable");
-        }*/
+        }
 
         return repo.findById(id)
                 .map(ApiResponse::ok)
@@ -102,6 +104,18 @@ public class ProductService {
         return ApiResponse.error(
                 "Too many requests. Please retry later.",
                 "PRODUCT_RATE_LIMITED"
+        );
+    }
+
+
+    // Retry fallbacks
+
+    public ApiResponse<Product> retryFallback(String id, Throwable ex) {
+        log.warn("[Retry] External service failed after retries");
+
+        return ApiResponse.error(
+                "Retry attempts exhausted",
+                "RETRY_FAILED"
         );
     }
 }

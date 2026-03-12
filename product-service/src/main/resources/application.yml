@@ -29,6 +29,15 @@ resilience4j:
         waitDurationInOpenState: 20s
         minimumNumberOfCalls: 5
         permittedNumberOfCallsInHalfOpenState: 3
+  retry:
+    instances:
+      pricingRetry:
+        maxAttempts: 3
+        waitDuration: 2s
+        retryExceptions:
+          - java.lang.RuntimeException
+        ignoreExceptions:
+          - java.lang.IllegalArgumentException
 
 management:
   endpoints:
