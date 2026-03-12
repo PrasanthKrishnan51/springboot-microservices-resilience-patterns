@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-class InventoryEvent {
+public class InventoryEvent {
     private String eventId;
     private String productId;
     private String orderId;

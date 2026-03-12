@@ -29,8 +29,4 @@ public class Inventory {
         return totalStock - reservedStock;
     }
 
-    @PreUpdate
-    void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
 }

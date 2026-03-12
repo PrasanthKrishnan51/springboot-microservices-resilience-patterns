@@ -37,7 +37,7 @@
                                   │
                        ┌──────────▼──────────┐
                        │  NOTIFICATION SVC   │
-                       │       :8086         │
+                       │       :8085         │
                        │  Email│SMS│Push     │
                        └─────────────────────┘
 ```
@@ -238,7 +238,7 @@ cd api-gateway     && mvn spring-boot:run   # start last
 | Product Service | 8082 | Product catalog |
 | Inventory Service | 8083 | Stock management |
 | Payment Service | 8084 | Payment gateway |
-| Notification Service | 8086 | Email/SMS/Push |
+| Notification Service | 8085 | Email/SMS/Push |
 | Kafka UI | 9090 | Topic browser |
 | Prometheus | 9091 | Metrics |
 | Grafana | 3000 | Dashboards (admin/admin123) |

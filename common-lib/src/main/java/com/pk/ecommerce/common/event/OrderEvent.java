@@ -14,7 +14,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-class OrderEvent {
+public class OrderEvent {
     private String eventId;
     private String orderId;
     private String userId;

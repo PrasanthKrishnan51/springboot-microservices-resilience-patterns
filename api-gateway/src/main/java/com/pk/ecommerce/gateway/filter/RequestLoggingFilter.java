@@ -9,13 +9,14 @@ import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
+
 import java.util.UUID;
 
 /**
  * Runs before every route.
- *  1. Injects X-Correlation-Id if absent.
- *  2. Logs incoming request.
- *  3. Logs response status + duration.
+ * 1. Injects X-Correlation-Id if absent.
+ * 2. Logs incoming request.
+ * 3. Logs response status + duration.
  */
 @Slf4j
 @Component
@@ -30,7 +31,7 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
         }
 
         final String cid = correlationId;
-        final long   t0  = System.currentTimeMillis();
+        final long t0 = System.currentTimeMillis();
 
         ServerHttpRequest mutated = exchange.getRequest().mutate()
                 .header(CorrelationIdUtil.HEADER_NAME, cid)
@@ -42,12 +43,15 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
 
         return chain.filter(exchange.mutate().request(mutated).build())
                 .then(Mono.fromRunnable(() ->
-                    log.info("[GW←] {} {} status={} duration={}ms correlationId={}",
-                        mutated.getMethod(), mutated.getURI().getPath(),
-                        exchange.getResponse().getStatusCode(),
-                        System.currentTimeMillis() - t0, cid)
+                        log.info("[GW←] {} {} status={} duration={}ms correlationId={}",
+                                mutated.getMethod(), mutated.getURI().getPath(),
+                                exchange.getResponse().getStatusCode(),
+                                System.currentTimeMillis() - t0, cid)
                 ));
     }
 
-    @Override public int getOrder() { return -1; }
+    @Override
+    public int getOrder() {
+        return -1;
+    }
 }

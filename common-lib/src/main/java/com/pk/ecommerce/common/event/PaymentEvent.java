@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-class PaymentEvent {
+public class PaymentEvent {
     private String        eventId;
     private String        paymentId;
     private String        orderId;

@@ -26,8 +26,8 @@ spring:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
         - name: RequestRateLimiter
           args:
-            redis-rate-limiter.replenishRate: 100        # tokens added/sec
-            redis-rate-limiter.burstCapacity: 200        # max burst
+            redis-rate-limiter.replenishRate: 5        # tokens added/sec
+            redis-rate-limiter.burstCapacity: 10        # max burst
             redis-rate-limiter.requestedTokens: 1
             key-resolver: "#{@ipKeyResolver}"
 

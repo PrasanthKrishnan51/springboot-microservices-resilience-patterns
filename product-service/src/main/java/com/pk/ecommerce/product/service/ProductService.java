@@ -21,6 +21,7 @@ public class ProductService {
     private final ProductRepository repo;
     private final KafkaTemplate<String, Object> kafka;
 
+    @CircuitBreaker(name = "externalPricingCB", fallbackMethod = "pricingFallback")
     @RateLimiter(name = "productReadLimiter", fallbackMethod = "readFallback")
     public ApiResponse<List<Product>> getAllProducts() {
         return ApiResponse.ok(repo.findByActiveTrue());
@@ -29,6 +30,9 @@ public class ProductService {
     @RateLimiter(name = "productReadLimiter", fallbackMethod = "readFallback")
     @CircuitBreaker(name = "externalPricingCB", fallbackMethod = "pricingFallback")
     public ApiResponse<Product> getProduct(String id) {
+        /*if(true){
+            throw new RuntimeException("Service Down");
+        }*/
         return repo.findById(id)
                 .map(ApiResponse::ok)
                 .orElse(ApiResponse.error("Product not found", "PRODUCT_NOT_FOUND"));

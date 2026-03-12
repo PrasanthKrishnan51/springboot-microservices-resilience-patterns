@@ -27,9 +27,9 @@ public class InventoryService {
      * Reserve stock – protected by CircuitBreaker + Retry + Bulkhead.
      * If a downstream DB or external WMS is involved, this prevents cascade failure.
      */
-    @CircuitBreaker(name = "wmsCB",fallbackMethod = "reserveFallback")
-    @Retry(name = "wmsRetry",     fallbackMethod = "reserveFallback")
-    @Bulkhead(name = "wmsBulkhead",  fallbackMethod = "reserveFallback")
+    @CircuitBreaker(name = "wmsCB", fallbackMethod = "reserveFallback")
+    @Retry(name = "wmsRetry", fallbackMethod = "reserveFallback")
+    @Bulkhead(name = "wmsBulkhead", fallbackMethod = "reserveFallback")
     @Transactional
     public ApiResponse<String> reserveStock(String productId, Integer quantity, String orderId) {
         log.info("Reserving stock productId={} qty={} orderId={}", productId, quantity, orderId);
@@ -44,9 +44,13 @@ public class InventoryService {
 
             // Publish FAILED result back
             InventoryResultEvent failed = InventoryResultEvent.builder()
-                    .productId(productId).orderId(orderId).quantity(quantity)
-                    .status("FAILED").remainingStock(inv.getAvailableStock())
-                    .failureReason(msg).build();
+                    .productId(productId)
+                    .orderId(orderId)
+                    .quantity(quantity)
+                    .status("FAILED")
+                    .remainingStock(inv.getAvailableStock())
+                    .failureReason(msg)
+                    .build();
             kafka.send(KafkaTopics.INVENTORY_RESERVED, orderId, failed);
 
             if (inv.getAvailableStock() < 10) {

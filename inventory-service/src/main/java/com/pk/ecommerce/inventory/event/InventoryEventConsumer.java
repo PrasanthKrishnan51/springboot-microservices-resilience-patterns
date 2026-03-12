@@ -11,9 +11,10 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.retry.annotation.Backoff;
+import org.springframework.stereotype.Component;
 
 @Slf4j
-@org.springframework.stereotype.Component
+@Component
 @RequiredArgsConstructor
 class InventoryEventConsumer {
     private final InventoryService inventoryService;
