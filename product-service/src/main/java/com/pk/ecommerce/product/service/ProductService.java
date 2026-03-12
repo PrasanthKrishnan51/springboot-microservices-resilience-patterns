@@ -30,10 +30,11 @@ public class ProductService {
         return ApiResponse.ok(repo.findByActiveTrue());
     }
 
-    //@RateLimiter(name = "productReadLimiter", fallbackMethod = "productRateLimitFallback")
+    @RateLimiter(name = "productReadLimiter", fallbackMethod = "productRateLimitFallback")
     @CircuitBreaker(name = "externalPricingCB", fallbackMethod = "pricingFallback")
     @Retry(name = "pricingRetry", fallbackMethod = "retryFallback")
     public ApiResponse<Product> getProduct(String id) {
+        log.info("Trying to get product : {}", id);
 
         if(true){
             throw new RuntimeException("Service Unavailable");
