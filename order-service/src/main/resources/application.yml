@@ -55,7 +55,7 @@ resilience4j:
           - java.util.concurrent.TimeoutException
           - org.springframework.web.reactive.function.client.WebClientResponseException$ServiceUnavailable
         ignoreExceptions:
-          - com.ecommerce.common.exception.EcommerceException   # business errors don't trip CB
+          - com.pk.ecommerce.common.exception.EcommerceException   # business errors don't trip CB
 
       # Used when calling Payment Service (stricter – money is involved)
       paymentServiceCB:
@@ -90,7 +90,7 @@ resilience4j:
           - java.io.IOException
           - java.util.concurrent.TimeoutException
         ignoreExceptions:
-          - com.ecommerce.common.exception.EcommerceException
+          - com.pk.ecommerce.common.exception.EcommerceException
 
       paymentServiceRetry:
         maxAttempts: 2                          # payment: retry only once extra

@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 8090
 
 spring:
   application:
@@ -12,7 +12,7 @@ spring:
 
   cloud:
     gateway:
-      #  Global CORS 
+
       globalcors:
         corsConfigurations:
           '[/**]':
@@ -21,18 +21,17 @@ spring:
             allowedHeaders: "*"
             exposedHeaders: [X-Correlation-Id, X-RateLimit-Remaining]
 
-      #  Global default filters applied to EVERY route 
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
         - name: RequestRateLimiter
           args:
-            redis-rate-limiter.replenishRate: 5        # tokens added/sec
-            redis-rate-limiter.burstCapacity: 10        # max burst
+            redis-rate-limiter.replenishRate: 5
+            redis-rate-limiter.burstCapacity: 10
             redis-rate-limiter.requestedTokens: 1
             key-resolver: "#{@ipKeyResolver}"
 
-      #  Routes 
       routes:
+
         # ORDER SERVICE
         - id: order-service
           uri: ${ORDER_SERVICE_URL:http://localhost:8081}
@@ -103,10 +102,22 @@ spring:
                 name: paymentServiceCB
                 fallbackUri: forward:/fallback/payment
 
-#  Resilience4j circuit breakers used by gateway routes 
+        # NOTIFICATION SERVICE
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/v1/notifications/**
+          filters:
+            - AddRequestHeader=X-Gateway-Source, ecom-gateway
+            - name: CircuitBreaker
+              args:
+                name: notificationServiceCB
+                fallbackUri: forward:/fallback/notification
+
 resilience4j:
   circuitbreaker:
     instances:
+
       orderServiceCB:
         registerHealthIndicator: true
         slidingWindowSize: 10
@@ -117,27 +128,36 @@ resilience4j:
         permittedNumberOfCallsInHalfOpenState: 5
         minimumNumberOfCalls: 5
         automaticTransitionFromOpenToHalfOpenEnabled: true
+
       productServiceCB:
         slidingWindowSize: 20
         failureRateThreshold: 50
         waitDurationInOpenState: 20s
         minimumNumberOfCalls: 5
+
       inventoryServiceCB:
         slidingWindowSize: 10
         failureRateThreshold: 60
         waitDurationInOpenState: 30s
         minimumNumberOfCalls: 5
+
       paymentServiceCB:
         slidingWindowSize: 10
-        failureRateThreshold: 40      # stricter – payment is critical
+        failureRateThreshold: 40
         waitDurationInOpenState: 60s
         minimumNumberOfCalls: 5
+
+      notificationServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        minimumNumberOfCalls: 5
+
       userServiceCB:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 20s
 
-#  Actuator 
 management:
   endpoints:
     web:
@@ -157,5 +177,5 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%X{correlationId}] %-5level %logger{36} - %msg%n"
   level:
-    com.ecommerce: DEBUG
+    com.pk: DEBUG
     org.springframework.cloud.gateway: INFO

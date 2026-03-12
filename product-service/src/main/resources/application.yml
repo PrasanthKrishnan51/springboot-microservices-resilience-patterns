@@ -23,16 +23,21 @@ resilience4j:
   circuitbreaker:
     instances:
       externalPricingCB:
+        registerHealthIndicator: true
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 20s
         minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,prometheus
+        include: health,metrics,prometheus,circuitbreakers
   endpoint:
     health:
       show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
